@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FPS Check — Estimate your gaming frame rate</title>
+  <meta name="description" content="Estimate the FPS your PC will get in popular games at different resolutions and graphics settings, from your GPU, CPU and RAM." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="logo"><span class="spark">⚡ FPS Check</span></div>
+      <p>Enter your PC specs to estimate the frame rate you'll get in popular games — at any resolution and graphics preset.</p>
+    </header>
+
+    <div class="grid">
+      <!-- ============ INPUTS ============ -->
+      <section class="card" aria-label="Your hardware">
+        <h2>Your hardware &amp; settings</h2>
+
+        <div class="field">
+          <label for="gpu-input">Graphics card (GPU)</label>
+          <div class="combo" id="gpu-combo">
+            <input type="text" id="gpu-input" placeholder="Search e.g. RTX 4070, RX 7800 XT…" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="gpu-list" />
+            <div class="combo-list" id="gpu-list" role="listbox"></div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="cpu-input">Processor (CPU)</label>
+          <div class="combo" id="cpu-combo">
+            <input type="text" id="cpu-input" placeholder="Search e.g. Ryzen 5 7600, i5-13600K…" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="cpu-list" />
+            <div class="combo-list" id="cpu-list" role="listbox"></div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label for="ram-select">Memory (RAM)</label>
+            <select id="ram-select"></select>
+          </div>
+          <div class="field">
+            <label for="ram-speed">RAM speed <span class="hint">(optional)</span></label>
+            <input type="number" id="ram-speed" placeholder="e.g. 6000" min="0" step="100" inputmode="numeric" />
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="game-select">Game</label>
+          <select id="game-select"></select>
+        </div>
+
+        <div class="field">
+          <label>Resolution</label>
+          <div class="seg three" id="res-seg"></div>
+        </div>
+
+        <div class="field" style="margin-bottom:0">
+          <label>Graphics preset</label>
+          <div class="seg four" id="preset-seg"></div>
+        </div>
+      </section>
+
+      <!-- ============ RESULTS ============ -->
+      <section class="card" aria-live="polite" aria-label="Estimated performance">
+        <h2>Estimated performance</h2>
+
+        <div class="result-head">
+          <div>
+            <span class="fps-num" id="fps-num">—</span>
+            <span class="fps-unit">FPS avg</span>
+            <div class="fps-sub" id="fps-context">Pick your specs to see an estimate</div>
+          </div>
+        </div>
+
+        <div id="badge" class="badge r-playable">—</div>
+        <p class="rating-blurb" id="rating-blurb"></p>
+
+        <div class="meta">
+          <div class="box">
+            <div class="k">GPU can push</div>
+            <div class="v" id="gpu-ceiling">—</div>
+          </div>
+          <div class="box">
+            <div class="k">CPU can feed</div>
+            <div class="v" id="cpu-ceiling">—</div>
+          </div>
+        </div>
+
+        <div class="bottleneck" id="bottleneck">
+          <span class="icon">🔎</span>
+          <span id="bottleneck-text">—</span>
+        </div>
+
+        <div class="chart-title" id="chart-title">FPS by preset</div>
+        <div class="chart" id="chart" role="img" aria-label="Bar chart of estimated FPS for each graphics preset"></div>
+      </section>
+    </div>
+
+    <div class="disclaimer">
+      <strong>These are ballpark estimates, not guarantees.</strong>
+      Numbers come from a component-scoring model calibrated to public benchmark
+      averages — not measured results for your exact machine. Real performance
+      varies with drivers, game version, background apps, thermals, upscaling
+      (DLSS/FSR), ray tracing and individual game scenes. Use them to compare
+      options and set expectations.
+    </div>
+
+    <footer>
+      Built as a fully client-side estimator — no data leaves your browser.
+    </footer>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="model.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
