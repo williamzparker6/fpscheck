@@ -7,97 +7,135 @@
   <meta name="description" content="Estimate the FPS your PC will get in popular games at different resolutions and graphics settings, from your GPU, CPU and RAM." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div class="wrap">
-    <header>
-      <div class="logo"><span class="spark">⚡ FPS Check</span></div>
-      <p>Enter your PC specs to estimate the frame rate you'll get in popular games — at any resolution and graphics preset.</p>
+    <header class="app-header">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>
+        </span>
+        <span class="brand-name">FPS&nbsp;<span>Check</span></span>
+      </div>
+      <p class="tagline">Pick your PC's parts and instantly estimate the frame rate you'll get in popular games — at any resolution and graphics preset.</p>
     </header>
 
-    <div class="grid">
-      <!-- ============ INPUTS ============ -->
-      <section class="card" aria-label="Your hardware">
-        <h2>Your hardware &amp; settings</h2>
+    <div class="layout">
+      <!-- ================= INPUTS ================= -->
+      <section class="panel" aria-label="Your hardware and settings">
+        <h2 class="panel-title">Your build</h2>
 
-        <div class="field">
-          <label for="gpu-input">Graphics card (GPU)</label>
-          <div class="combo" id="gpu-combo">
-            <input type="text" id="gpu-input" placeholder="Search e.g. RTX 4070, RX 7800 XT…" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="gpu-list" />
-            <div class="combo-list" id="gpu-list" role="listbox"></div>
-          </div>
+        <div class="control">
+          <label class="control-label" id="lbl-gpu">
+            <svg class="i-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="8" cy="12" r="2.3"/><circle cx="15" cy="12" r="2.3"/></svg>
+            Graphics card (GPU)
+          </label>
+          <div id="dd-gpu" aria-labelledby="lbl-gpu"></div>
         </div>
 
-        <div class="field">
-          <label for="cpu-input">Processor (CPU)</label>
-          <div class="combo" id="cpu-combo">
-            <input type="text" id="cpu-input" placeholder="Search e.g. Ryzen 5 7600, i5-13600K…" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="cpu-list" />
-            <div class="combo-list" id="cpu-list" role="listbox"></div>
-          </div>
+        <div class="control">
+          <label class="control-label" id="lbl-cpu">
+            <svg class="i-blue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="1.5"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg>
+            Processor (CPU)
+          </label>
+          <div id="dd-cpu" aria-labelledby="lbl-cpu"></div>
         </div>
 
         <div class="row">
-          <div class="field">
-            <label for="ram-select">Memory (RAM)</label>
-            <select id="ram-select"></select>
+          <div class="control">
+            <label class="control-label" id="lbl-ram">
+              <svg class="i-violet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="8" width="20" height="9" rx="1.5"/><path d="M6 8v9M10 8v9M14 8v9M18 8v9M9 20h6"/></svg>
+              Memory
+            </label>
+            <div id="dd-ram" aria-labelledby="lbl-ram"></div>
           </div>
-          <div class="field">
-            <label for="ram-speed">RAM speed <span class="hint">(optional)</span></label>
-            <input type="number" id="ram-speed" placeholder="e.g. 6000" min="0" step="100" inputmode="numeric" />
+          <div class="control">
+            <label class="control-label" for="ram-speed">
+              Speed <span class="opt">· optional</span>
+            </label>
+            <input type="number" id="ram-speed" placeholder="e.g. 6000 MT/s" min="0" step="100" inputmode="numeric" />
           </div>
         </div>
 
-        <div class="field">
-          <label for="game-select">Game</label>
-          <select id="game-select"></select>
+        <div class="control">
+          <label class="control-label" id="lbl-game">
+            <svg class="i-green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="11" rx="5.5"/><path d="M7 11v3M5.5 12.5h3M15.5 12h.01M18 14h.01"/></svg>
+            Game
+          </label>
+          <div id="dd-game" aria-labelledby="lbl-game"></div>
         </div>
 
-        <div class="field">
-          <label>Resolution</label>
-          <div class="seg three" id="res-seg"></div>
+        <div class="control">
+          <label class="control-label">
+            <svg class="i-blue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+            Resolution
+          </label>
+          <div class="seg cols-3" id="seg-res"></div>
         </div>
 
-        <div class="field" style="margin-bottom:0">
-          <label>Graphics preset</label>
-          <div class="seg four" id="preset-seg"></div>
+        <div class="control">
+          <label class="control-label">
+            <svg class="i-violet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
+            Graphics preset
+          </label>
+          <div class="seg cols-4" id="seg-preset"></div>
         </div>
       </section>
 
-      <!-- ============ RESULTS ============ -->
-      <section class="card" aria-live="polite" aria-label="Estimated performance">
-        <h2>Estimated performance</h2>
+      <!-- ================= RESULTS ================= -->
+      <section class="panel" aria-live="polite" aria-label="Estimated performance">
+        <h2 class="panel-title">Estimated performance</h2>
 
-        <div class="result-head">
-          <div>
-            <span class="fps-num" id="fps-num">—</span>
-            <span class="fps-unit">FPS avg</span>
-            <div class="fps-sub" id="fps-context">Pick your specs to see an estimate</div>
+        <div class="gauge">
+          <svg viewBox="0 0 180 180" aria-hidden="true">
+            <circle class="gauge-track" cx="90" cy="90" r="78" fill="none" stroke-width="14" />
+            <circle id="gauge-prog" class="gauge-prog" cx="90" cy="90" r="78" fill="none" stroke-width="14" stroke-linecap="round" />
+          </svg>
+          <div class="gauge-center">
+            <div class="fps-value" id="fps-value">0</div>
+            <div class="fps-suffix">FPS avg</div>
           </div>
         </div>
 
-        <div id="badge" class="badge r-playable">—</div>
-        <p class="rating-blurb" id="rating-blurb"></p>
+        <div class="result-head">
+          <span class="rating r-playable" id="rating-badge">—</span>
+          <p class="fps-meta" id="fps-meta">—</p>
+          <p class="rating-blurb" id="rating-blurb"></p>
+        </div>
 
-        <div class="meta">
-          <div class="box">
-            <div class="k">GPU can push</div>
-            <div class="v" id="gpu-ceiling">—</div>
+        <div class="stat-grid">
+          <div class="stat">
+            <div class="k"><svg class="i-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/></svg> GPU ceiling</div>
+            <div class="v" id="stat-gpu">—</div>
+            <div class="s">graphics-limited</div>
           </div>
-          <div class="box">
-            <div class="k">CPU can feed</div>
-            <div class="v" id="cpu-ceiling">—</div>
+          <div class="stat">
+            <div class="k"><svg class="i-blue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg> CPU ceiling</div>
+            <div class="v" id="stat-cpu">—</div>
+            <div class="s">processor-limited</div>
+          </div>
+          <div class="stat">
+            <div class="k"><svg class="i-violet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="8" width="20" height="9" rx="1.5"/></svg> Memory</div>
+            <div class="v" id="stat-ram">—</div>
+            <div class="s" id="stat-ram-sub">—</div>
           </div>
         </div>
 
         <div class="bottleneck" id="bottleneck">
-          <span class="icon">🔎</span>
+          <span class="icon" id="bottleneck-icon">🔎</span>
           <span id="bottleneck-text">—</span>
         </div>
 
-        <div class="chart-title" id="chart-title">FPS by preset</div>
-        <div class="chart" id="chart" role="img" aria-label="Bar chart of estimated FPS for each graphics preset"></div>
+        <div class="chart-head">
+          <span class="chart-title" id="chart-title">FPS by preset</span>
+          <div class="chart-toggle" id="chart-toggle" role="tablist">
+            <button type="button" data-mode="preset" class="active" role="tab">Presets</button>
+            <button type="button" data-mode="resolution" role="tab">Resolutions</button>
+          </div>
+        </div>
+        <div class="chart" id="chart" role="img" aria-label="Estimated FPS comparison chart"></div>
       </section>
     </div>
 
@@ -106,13 +144,10 @@
       Numbers come from a component-scoring model calibrated to public benchmark
       averages — not measured results for your exact machine. Real performance
       varies with drivers, game version, background apps, thermals, upscaling
-      (DLSS/FSR), ray tracing and individual game scenes. Use them to compare
-      options and set expectations.
+      (DLSS/FSR) and ray tracing. Use them to compare options and set expectations.
     </div>
 
-    <footer>
-      Built as a fully client-side estimator — no data leaves your browser.
-    </footer>
+    <p class="foot">100% client-side — your specs never leave your browser.</p>
   </div>
 
   <script src="data.js"></script>

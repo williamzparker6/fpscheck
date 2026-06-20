@@ -1,7 +1,8 @@
 /* =============================================================================
- * app.js — UI wiring for the FPS estimator
- * Builds the searchable dropdowns + segmented controls, holds the form state,
- * and re-renders results instantly on every change (no page reload).
+ * app.js — UI for the FPS estimator
+ * Custom searchable dropdowns (GPU/CPU/Game/RAM), segmented controls, a radial
+ * gauge with count-up, and a preset/resolution comparison chart. Re-renders
+ * instantly on every change (no page reload).
  * ========================================================================== */
 
 (function () {
@@ -9,8 +10,13 @@
 
   const { estimateFps, ratingFor } = window.FpsModel;
   const $ = (id) => document.getElementById(id);
+  const ICON = {
+    caret: '<svg class="dd-caret" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>',
+    search: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-3.6-3.6"/></svg>',
+    check: '<svg class="check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 7"/></svg>',
+  };
 
-  // --- Form state (sensible defaults so the page shows a result on load) ---
+  /* ---------------------------- App state ---------------------------- */
   const state = {
     gpu: GPUS.find((g) => g.name === "NVIDIA RTX 4070"),
     cpu: CPUS.find((c) => c.name === "AMD Ryzen 5 7600"),
@@ -19,222 +25,248 @@
     game: GAMES.find((g) => g.name === "Cyberpunk 2077"),
     resolutionKey: "1080p",
     presetKey: "High",
+    chartMode: "preset", // 'preset' | 'resolution'
   };
 
-  /* ----------------------------------------------------------------------
-   * Searchable combobox (reusable for GPU + CPU)
-   * -------------------------------------------------------------------- */
-  function makeCombo({ inputId, listId, items, getInitial, onPick }) {
-    const input = $(inputId);
-    const list = $(listId);
+  // Stable RAM option objects (shared by the dropdown + getValue so reference
+  // equality lights up the selected row).
+  const RAM_ITEMS = RAM_OPTIONS.map((gb) => ({ name: gb + " GB", gb }));
+
+  /* ======================================================================
+   * Custom dropdown component (searchable, grouped, keyboard-accessible)
+   * ==================================================================== */
+  const openDropdowns = new Set();
+
+  function createDropdown({ rootId, items, getValue, setValue, searchable = true, groupBy = null, placeholder = "Search…" }) {
+    const root = $(rootId);
+    root.classList.add("dd");
+    root.innerHTML =
+      `<button type="button" class="dd-trigger" aria-haspopup="listbox" aria-expanded="false">
+         <span class="dd-value"></span>${ICON.caret}
+       </button>
+       <div class="dd-panel" hidden role="dialog">
+         ${searchable ? `<div class="dd-search">${ICON.search}<input type="text" class="dd-input" placeholder="${placeholder}" autocomplete="off" aria-label="${placeholder}"/></div>` : ""}
+         <ul class="dd-list" role="listbox"></ul>
+       </div>`;
+
+    const trigger = root.querySelector(".dd-trigger");
+    const valueEl = root.querySelector(".dd-value");
+    const panel = root.querySelector(".dd-panel");
+    const input = root.querySelector(".dd-input");
+    const list = root.querySelector(".dd-list");
+
+    let flatItems = [];     // options in displayed order (for keyboard nav)
     let activeIdx = -1;
-    let filtered = items;
 
-    input.value = getInitial() ? getInitial().name : "";
+    const optionLabel = (it) => {
+      if (groupBy) { const g = groupBy(it); return it.name.startsWith(g + " ") ? it.name.slice(g.length + 1) : it.name; }
+      return it.name;
+    };
 
-    function render(query) {
-      const q = query.trim().toLowerCase();
-      filtered = q
-        ? items.filter((it) => it.name.toLowerCase().includes(q))
-        : items;
+    function renderList() {
+      const q = (input ? input.value : "").trim().toLowerCase();
+      const matches = q ? items.filter((it) => it.name.toLowerCase().includes(q)) : items.slice();
+      flatItems = matches;
       activeIdx = -1;
 
-      if (filtered.length === 0) {
-        list.innerHTML = '<div class="combo-empty">No match — try another model</div>';
-        return;
-      }
-      list.innerHTML = filtered
-        .map(
-          (it, i) =>
-            `<div class="combo-opt" role="option" data-i="${i}">
-               <span>${it.name}</span><small>index ${it.score}</small>
-             </div>`
-        )
-        .join("");
+      if (!matches.length) { list.innerHTML = '<li class="dd-empty">No match — try another model</li>'; return; }
+
+      const cur = getValue();
+      let html = "", lastGroup = null;
+      matches.forEach((it, i) => {
+        if (groupBy) { const g = groupBy(it); if (g !== lastGroup) { html += `<li class="dd-group">${g}</li>`; lastGroup = g; } }
+        const sel = it === cur;
+        const meta = it.score !== undefined ? `idx ${it.score}` : "";
+        html += `<li class="dd-option ${sel ? "selected" : ""}" role="option" data-i="${i}" aria-selected="${sel}">
+                   <span class="opt-name">${sel ? ICON.check : ""}${optionLabel(it)}</span>
+                   <span class="meta">${meta}</span>
+                 </li>`;
+      });
+      list.innerHTML = html;
     }
 
-    function open() { list.classList.add("open"); input.setAttribute("aria-expanded", "true"); }
-    function close() { list.classList.remove("open"); input.setAttribute("aria-expanded", "false"); }
-
-    function pick(it) {
-      if (!it) return;
-      input.value = it.name;
-      onPick(it);
-      close();
+    function setActive(idx) {
+      activeIdx = idx;
+      list.querySelectorAll(".dd-option").forEach((o) => {
+        const on = Number(o.dataset.i) === idx;
+        o.classList.toggle("active", on);
+        if (on) o.scrollIntoView({ block: "nearest" });
+      });
     }
 
-    function highlight(idx) {
-      const opts = [...list.querySelectorAll(".combo-opt")];
-      opts.forEach((o) => o.classList.remove("active"));
-      if (idx >= 0 && opts[idx]) {
-        opts[idx].classList.add("active");
-        opts[idx].scrollIntoView({ block: "nearest" });
-      }
+    function open() {
+      closeAll(api);
+      panel.hidden = false; root.classList.add("open"); trigger.setAttribute("aria-expanded", "true");
+      if (input) input.value = "";
+      renderList();
+      openDropdowns.add(api);
+      if (input) setTimeout(() => input.focus(), 0);
+    }
+    function close() {
+      panel.hidden = true; root.classList.remove("open"); trigger.setAttribute("aria-expanded", "false");
+      openDropdowns.delete(api);
+    }
+    function choose(it) { if (!it) return; setValue(it); syncTrigger(); close(); trigger.focus(); }
+    function syncTrigger() {
+      const cur = getValue();
+      valueEl.textContent = cur ? cur.name : "";
+      valueEl.classList.toggle("placeholder", !cur);
     }
 
-    input.addEventListener("focus", () => { render(""); open(); input.select(); });
-    input.addEventListener("input", () => { render(input.value); open(); });
-
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "ArrowDown") { e.preventDefault(); activeIdx = Math.min(activeIdx + 1, filtered.length - 1); highlight(activeIdx); }
-      else if (e.key === "ArrowUp") { e.preventDefault(); activeIdx = Math.max(activeIdx - 1, 0); highlight(activeIdx); }
-      else if (e.key === "Enter") { e.preventDefault(); pick(filtered[activeIdx >= 0 ? activeIdx : 0]); }
-      else if (e.key === "Escape") { close(); input.blur(); }
+    trigger.addEventListener("click", () => (panel.hidden ? open() : close()));
+    list.addEventListener("mousedown", (e) => {            // mousedown beats input blur
+      const li = e.target.closest(".dd-option");
+      if (li) { e.preventDefault(); choose(flatItems[Number(li.dataset.i)]); }
     });
+    if (input) {
+      input.addEventListener("input", renderList);
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowDown") { e.preventDefault(); setActive(Math.min(activeIdx + 1, flatItems.length - 1)); }
+        else if (e.key === "ArrowUp") { e.preventDefault(); setActive(Math.max(activeIdx - 1, 0)); }
+        else if (e.key === "Enter") { e.preventDefault(); choose(flatItems[activeIdx >= 0 ? activeIdx : 0]); }
+        else if (e.key === "Escape") { e.preventDefault(); close(); trigger.focus(); }
+      });
+    }
 
-    list.addEventListener("mousedown", (e) => {
-      // mousedown (not click) so it fires before the input's blur
-      const opt = e.target.closest(".combo-opt");
-      if (opt) pick(filtered[Number(opt.dataset.i)]);
-    });
-
-    input.addEventListener("blur", () => {
-      // If the typed text isn't a valid pick, restore the last valid selection
-      setTimeout(() => {
-        const cur = getInitial();
-        if (!items.some((it) => it.name === input.value)) {
-          input.value = cur ? cur.name : "";
-        }
-        close();
-      }, 120);
-    });
+    const api = { close, root };
+    syncTrigger();
+    return api;
   }
 
-  /* ----------------------------------------------------------------------
-   * Segmented controls (resolution + preset)
-   * -------------------------------------------------------------------- */
-  function makeSegmented(containerId, options, getCurrent, onPick) {
+  function closeAll(except) { openDropdowns.forEach((dd) => { if (dd !== except) dd.close(); }); }
+  document.addEventListener("click", (e) => {
+    openDropdowns.forEach((dd) => { if (!dd.root.contains(e.target)) dd.close(); });
+  });
+
+  /* ======================================================================
+   * Segmented button groups
+   * ==================================================================== */
+  function makeSegmented(containerId, keys, getCurrent, onPick) {
     const el = $(containerId);
-    el.innerHTML = options
-      .map((o) => `<button type="button" data-key="${o.key}">${o.label}</button>`)
-      .join("");
-    function sync() {
-      [...el.children].forEach((b) =>
-        b.classList.toggle("active", b.dataset.key === getCurrent())
-      );
-    }
-    el.addEventListener("click", (e) => {
-      const btn = e.target.closest("button");
-      if (!btn) return;
-      onPick(btn.dataset.key);
-      sync();
-    });
+    el.innerHTML = keys.map((k) => `<button type="button" data-key="${k}">${k}</button>`).join("");
+    const sync = () => [...el.children].forEach((b) => b.classList.toggle("active", b.dataset.key === getCurrent()));
+    el.addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; onPick(b.dataset.key); sync(); });
     sync();
-    return sync;
   }
 
-  /* ----------------------------------------------------------------------
-   * Plain selects (RAM + game)
-   * -------------------------------------------------------------------- */
-  function populateRam() {
-    const sel = $("ram-select");
-    sel.innerHTML = RAM_OPTIONS.map(
-      (gb) => `<option value="${gb}" ${gb === state.ramGB ? "selected" : ""}>${gb} GB</option>`
-    ).join("");
-    sel.addEventListener("change", () => { state.ramGB = Number(sel.value); render(); });
-  }
+  /* ======================================================================
+   * Rendering
+   * ==================================================================== */
+  const GAUGE_C = 2 * Math.PI * 78;         // gauge circle circumference
+  const GAUGE_TARGET = 144;                 // a full ring = 144 FPS (high-refresh)
 
-  function populateGames() {
-    const sel = $("game-select");
-    sel.innerHTML = GAMES.map(
-      (g) => `<option value="${g.name}" ${g === state.game ? "selected" : ""}>${g.name}</option>`
-    ).join("");
-    sel.addEventListener("change", () => {
-      state.game = GAMES.find((g) => g.name === sel.value);
-      render();
+  function compute(presetKey, resolutionKey) {
+    return estimateFps({
+      gpuScore: state.gpu.score, cpuScore: state.cpu.score,
+      ramGB: state.ramGB, ramSpeedMhz: state.ramSpeedMhz,
+      game: state.game,
+      resolutionKey: resolutionKey || state.resolutionKey,
+      presetKey: presetKey || state.presetKey,
     });
   }
 
-  /* ----------------------------------------------------------------------
-   * Rendering
-   * -------------------------------------------------------------------- */
-  function fmt(n) { return n.toLocaleString(); }
+  let countAnim = 0;
+  function animateNumber(el, to) {
+    cancelAnimationFrame(countAnim);
+    const from = Number(el.dataset.v || 0);
+    el.dataset.v = to;
+    if (from === to) { el.textContent = to; return; }
+    const start = performance.now(), dur = 480;
+    const step = (now) => {
+      const t = Math.min((now - start) / dur, 1);
+      const e = 1 - Math.pow(1 - t, 3);     // easeOutCubic
+      el.textContent = Math.round(from + (to - from) * e);
+      if (t < 1) countAnim = requestAnimationFrame(step);
+    };
+    countAnim = requestAnimationFrame(step);
+  }
+
+  function ramStatus() {
+    if (state.ramGB < 8) return "too low";
+    if (state.ramGB < state.game.ramMin) return "a bit low";
+    return "ample";
+  }
 
   function render() {
     if (!state.gpu || !state.cpu || !state.game) return;
-
-    const r = estimateFps({
-      gpuScore: state.gpu.score,
-      cpuScore: state.cpu.score,
-      ramGB: state.ramGB,
-      ramSpeedMhz: state.ramSpeedMhz,
-      game: state.game,
-      resolutionKey: state.resolutionKey,
-      presetKey: state.presetKey,
-    });
-
+    const r = compute();
     const rating = ratingFor(r.fps);
+    const color = getComputedStyle(document.documentElement).getPropertyValue("--" + rating.cls).trim();
 
-    $("fps-num").textContent = r.fps;
-    $("fps-context").textContent =
-      `${state.game.name} · ${RESOLUTIONS[state.resolutionKey].label} · ${state.presetKey}`;
+    // Gauge
+    animateNumber($("fps-value"), r.fps);
+    const prog = $("gauge-prog");
+    prog.style.strokeDasharray = GAUGE_C;
+    prog.style.strokeDashoffset = GAUGE_C * (1 - Math.max(0, Math.min(r.fps / GAUGE_TARGET, 1)));
+    prog.style.stroke = color || "var(--accent)";
 
-    const badge = $("badge");
+    // Rating + meta
+    const badge = $("rating-badge");
     badge.textContent = rating.label;
-    badge.className = "badge " + rating.cls;
+    badge.className = "rating " + rating.cls;
+    $("fps-meta").textContent = `${state.game.name} · ${RESOLUTIONS[state.resolutionKey].label} · ${state.presetKey}`;
     $("rating-blurb").textContent = rating.blurb;
 
-    $("gpu-ceiling").textContent = fmt(r.gpuCeiling) + " FPS";
-    $("cpu-ceiling").textContent = fmt(r.cpuCeiling) + " FPS";
+    // Stats
+    $("stat-gpu").textContent = r.gpuCeiling.toLocaleString() + " FPS";
+    $("stat-cpu").textContent = r.cpuCeiling.toLocaleString() + " FPS";
+    $("stat-ram").textContent = state.ramGB + " GB";
+    $("stat-ram-sub").textContent = ramStatus();
 
+    // Bottleneck
     const bn = $("bottleneck");
     bn.className = "bottleneck k-" + r.bottleneckKind;
-    const icon = { gpu: "🎮", cpu: "🧠", cap: "🔒", ram: "📉", balanced: "⚖️" }[r.bottleneckKind] || "🔎";
-    bn.querySelector(".icon").textContent = icon;
+    $("bottleneck-icon").textContent = { gpu: "🎮", cpu: "🧠", cap: "🔒", ram: "📉", balanced: "⚖️" }[r.bottleneckKind] || "🔎";
     $("bottleneck-text").textContent = r.bottleneck;
 
     renderChart();
   }
 
-  /** Bar chart: FPS for each preset at the currently selected resolution. */
   function renderChart() {
-    const presetKeys = Object.keys(PRESETS);
-    const results = presetKeys.map((pk) => ({
-      key: pk,
-      fps: estimateFps({
-        gpuScore: state.gpu.score,
-        cpuScore: state.cpu.score,
-        ramGB: state.ramGB,
-        ramSpeedMhz: state.ramSpeedMhz,
-        game: state.game,
-        resolutionKey: state.resolutionKey,
-        presetKey: pk,
-      }).fps,
-    }));
-
-    const max = Math.max(...results.map((r) => r.fps), 1);
-    $("chart-title").textContent = `FPS by preset · ${RESOLUTIONS[state.resolutionKey].label}`;
-
-    $("chart").innerHTML = results
-      .map((r) => {
-        const h = Math.max(4, Math.round((r.fps / max) * 130));
-        const current = r.key === state.presetKey ? "current" : "dim";
-        return `<div class="bar-col ${current}">
-                  <div class="bar-val">${r.fps}</div>
-                  <div class="bar" style="height:${h}px"></div>
-                  <div class="bar-label">${r.key}</div>
-                </div>`;
+    let cols, title, currentKey;
+    if (state.chartMode === "resolution") {
+      cols = Object.keys(RESOLUTIONS).map((k) => ({ key: k, label: k, fps: compute(state.presetKey, k).fps }));
+      title = `FPS by resolution · ${state.presetKey} preset`;
+      currentKey = state.resolutionKey;
+    } else {
+      cols = Object.keys(PRESETS).map((k) => ({ key: k, label: k, fps: compute(k, state.resolutionKey).fps }));
+      title = `FPS by preset · ${RESOLUTIONS[state.resolutionKey].label}`;
+      currentKey = state.presetKey;
+    }
+    $("chart-title").textContent = title;
+    const max = Math.max(...cols.map((c) => c.fps), 1);
+    $("chart").innerHTML = cols
+      .map((c) => {
+        const h = Math.max(4, Math.round((c.fps / max) * 128));
+        const cls = c.key === currentKey ? "current" : "dim";
+        return `<div class="bar-col ${cls}"><div class="bar-val">${c.fps}</div><div class="bar" style="height:${h}px"></div><div class="bar-label">${c.label}</div></div>`;
       })
       .join("");
   }
 
-  /* ----------------------------------------------------------------------
+  /* ======================================================================
    * Boot
-   * -------------------------------------------------------------------- */
+   * ==================================================================== */
   function init() {
-    makeCombo({
-      inputId: "gpu-input", listId: "gpu-list", items: GPUS,
-      getInitial: () => state.gpu,
-      onPick: (it) => { state.gpu = it; render(); },
-    });
-    makeCombo({
-      inputId: "cpu-input", listId: "cpu-list", items: CPUS,
-      getInitial: () => state.cpu,
-      onPick: (it) => { state.cpu = it; render(); },
-    });
+    const brandOf = (it) => it.name.split(" ")[0];   // NVIDIA / AMD / Intel
 
-    populateRam();
-    populateGames();
+    createDropdown({
+      rootId: "dd-gpu", items: GPUS, groupBy: brandOf, placeholder: "Search GPUs e.g. RTX 4070…",
+      getValue: () => state.gpu, setValue: (it) => { state.gpu = it; render(); },
+    });
+    createDropdown({
+      rootId: "dd-cpu", items: CPUS, groupBy: brandOf, placeholder: "Search CPUs e.g. i5-13600K…",
+      getValue: () => state.cpu, setValue: (it) => { state.cpu = it; render(); },
+    });
+    createDropdown({
+      rootId: "dd-game", items: GAMES, placeholder: "Search games…",
+      getValue: () => state.game, setValue: (it) => { state.game = it; render(); },
+    });
+    createDropdown({
+      rootId: "dd-ram", items: RAM_ITEMS, searchable: false,
+      getValue: () => RAM_ITEMS.find((i) => i.gb === state.ramGB),
+      setValue: (it) => { state.ramGB = it.gb; render(); },
+    });
 
     $("ram-speed").addEventListener("input", (e) => {
       const v = Number(e.target.value);
@@ -242,18 +274,16 @@
       render();
     });
 
-    makeSegmented(
-      "res-seg",
-      Object.keys(RESOLUTIONS).map((k) => ({ key: k, label: k })),
-      () => state.resolutionKey,
-      (k) => { state.resolutionKey = k; render(); }
-    );
-    makeSegmented(
-      "preset-seg",
-      Object.keys(PRESETS).map((k) => ({ key: k, label: k })),
-      () => state.presetKey,
-      (k) => { state.presetKey = k; render(); }
-    );
+    makeSegmented("seg-res", Object.keys(RESOLUTIONS), () => state.resolutionKey, (k) => { state.resolutionKey = k; render(); });
+    makeSegmented("seg-preset", Object.keys(PRESETS), () => state.presetKey, (k) => { state.presetKey = k; render(); });
+
+    const toggle = $("chart-toggle");
+    toggle.addEventListener("click", (e) => {
+      const b = e.target.closest("button"); if (!b) return;
+      state.chartMode = b.dataset.mode;
+      [...toggle.children].forEach((c) => c.classList.toggle("active", c === b));
+      renderChart();
+    });
 
     render();
   }
